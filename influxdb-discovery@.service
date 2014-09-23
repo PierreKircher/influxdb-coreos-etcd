@@ -1,0 +1,23 @@
+[Unit]
+Description=Influxdb Discovery Service
+After=influxdb@%i.service
+BindsTo=influxdb@%i.service
+ 
+[Service]
+EnvironmentFile=/etc/environment
+ 
+ExecStart=/bin/bash -c '\
+  while true; do \
+    curl -fSs ${COREOS_PRIVATE_IPV4}:8086/ping > /dev/null; \
+    if [ "$?" = "0" ]; then \
+      etcdctl set /services/influxdb/${COREOS_PRIVATE_IPV4} \'{"admin_port": 8083, "api_port": 8086, "raft_port": 8090, "protobuf_port": 8099}\' --ttl 60; \
+    else \
+      etcdctl rm /services/influxdb/${COREOS_PRIVATE_IPV4}; \
+    fi; \
+    sleep 45; \
+  done'
+ 
+ExecStop=/usr/bin/etcdctl rm /services/influxdb/${COREOS_PRIVATE_IPV4}
+ 
+[X-Fleet]
+MachineOf=influxdb@%i.service

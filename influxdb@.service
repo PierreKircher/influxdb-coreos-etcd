@@ -1,0 +1,43 @@
+[Unit]
+Description=Influxdb service
+Documentation=http://influxdb.com/docs/v0.8/introduction/overview.html
+After=docker.service
+Requires=docker.service
+Requires=influxdb-discovery@%i.service
+ 
+[Service]
+TimeoutSec=0
+EnvironmentFile=/etc/environment
+ 
+ExecStartPre=/usr/bin/mkdir -p /data/influxdb
+ExecStartPre=/usr/bin/chmod -R 0777 /data/influxdb
+ExecStartPre=/usr/bin/docker pull digitalwonderland/influxdb
+ 
+ExecStart=/bin/bash -c '\
+  curl -f ${COREOS_PRIVATE_IPV4}:4001/v2/keys/services/influxdb; \
+  if [ "$?" = "0" ]; then \
+      INFLUXDB_HOSTS=$(etcdctl ls --recursive /services/influxdb \
+                      | sed "s/\/services\/influxdb\///g" \
+                      | sed "s/$/:8090/" \
+                      | paste -s -d" "); \
+  else \
+      INFLUXDB_HOSTS=""; \
+  fi; \
+  /usr/bin/docker run \
+    -e PUBLIC_IP=${COREOS_PRIVATE_IPV4} \
+    --name %p-%i \
+    --publish 2003:2003 \
+    --publish 2003:2003/udp \
+    --publish 8083:8083 \
+    --publish 8086:8086 \
+    --publish 8090:8090 \
+    --publish 8099:8099 \
+    --volume /data/influxdb:/var/lib/influxdb \
+    digitalwonderland/influxdb \
+    $INFLUXDB_HOSTS'
+ 
+ExecStop=/usr/bin/docker stop %p-%i
+ExecStop=/usr/bin/docker rm %p-%i
+ 
+[X-Fleet]
+Conflicts=%p@*.service
